@@ -76,6 +76,7 @@ import coil.compose.AsyncImage
 import com.example.data.security.DeviceMediaFile
 import com.example.data.security.PrivacyVaultManager
 import com.example.ui.components.F2WEmptyState
+import com.example.ui.components.permission.rememberMediaPermissionState
 import com.example.ui.theme.F2WCardBorder
 import com.example.ui.theme.F2WCyanPrimary
 import com.example.ui.theme.F2WSurface
@@ -83,6 +84,7 @@ import com.example.ui.theme.F2WSurfaceElevated
 import com.example.ui.theme.F2WTextPrimary
 import com.example.ui.theme.F2WTextSecondary
 import com.example.ui.theme.F2WTextTertiary
+import com.example.util.permission.MediaPermissionType
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -110,6 +112,12 @@ fun PrivacyFilePickerListScreen(
     var isMoving by remember { mutableStateOf(false) }
     var moveProgressText by remember { mutableStateOf("") }
 
+    val permissionType = when (type) {
+        PrivacyAddType.VIDEO -> MediaPermissionType.VIDEO
+        PrivacyAddType.AUDIO -> MediaPermissionType.AUDIO
+        PrivacyAddType.IMAGE -> MediaPermissionType.IMAGES
+    }
+
     val loadFiles = {
         coroutineScope.launch {
             isLoading = true
@@ -118,8 +126,19 @@ fun PrivacyFilePickerListScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        loadFiles()
+    val mediaPermissionState = rememberMediaPermissionState(
+        type = permissionType,
+        onPermissionGranted = {
+            loadFiles()
+        }
+    )
+
+    LaunchedEffect(mediaPermissionState.hasAccess) {
+        if (mediaPermissionState.hasAccess) {
+            loadFiles()
+        } else {
+            isLoading = false
+        }
     }
 
     val filteredFiles = remember(deviceFiles, searchQuery) {
@@ -306,9 +325,15 @@ fun PrivacyFilePickerListScreen(
                         icon = type.icon,
                         title = "No ${type.title} Files Found",
                         description = "No local ${type.title.lowercase()} files were found on this device or all detected files are already in the vault.",
-                        actionLabel = "Refresh Scan",
+                        actionLabel = if (mediaPermissionState.hasAccess) "Refresh Scan" else "Grant Storage Permission",
                         actionIcon = Icons.Filled.Refresh,
-                        onActionClick = { loadFiles() },
+                        onActionClick = {
+                            if (mediaPermissionState.hasAccess) {
+                                loadFiles()
+                            } else {
+                                mediaPermissionState.requestPermissions()
+                            }
+                        },
                         tipText = "Ensure media storage permission is granted",
                         testTag = "empty_${type.name.lowercase()}_state"
                     )

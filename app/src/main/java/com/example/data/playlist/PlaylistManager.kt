@@ -83,64 +83,18 @@ class PlaylistManager private constructor(private val appContext: Context) {
     }
 
     private fun seedDefaultPlaylists() {
-        val defaultVideoVideos = DemoVideoData.sampleVideos.take(3).map { v ->
-            PlaylistItemModel(
-                id = v.id,
-                title = v.title,
-                uriString = v.uriString,
-                durationText = v.durationText,
-                durationMs = v.durationMs,
-                sizeText = v.sizeText,
-                subtitle = v.folderName,
-                mediaType = PlaylistMediaType.VIDEO
-            )
-        }
-
-        val defaultAudioItems = listOf(
-            PlaylistItemModel(
-                id = "audio_sample_1",
-                title = "Midnight City Echoes",
-                uriString = "",
-                durationText = "04:05",
-                durationMs = 245000L,
-                sizeText = "8.5 MB",
-                subtitle = "Electronic / Synth",
-                mediaType = PlaylistMediaType.AUDIO
-            ),
-            PlaylistItemModel(
-                id = "audio_sample_2",
-                title = "Acoustic Sunset Guitar",
-                uriString = "",
-                durationText = "05:10",
-                durationMs = 310000L,
-                sizeText = "32 MB",
-                subtitle = "Acoustic / Instrumental",
-                mediaType = PlaylistMediaType.AUDIO
-            ),
-            PlaylistItemModel(
-                id = "audio_sample_3",
-                title = "Lo-Fi Study Beats 2026",
-                uriString = "",
-                durationText = "03:18",
-                durationMs = 198000L,
-                sizeText = "45 MB",
-                subtitle = "Chill / Lo-Fi",
-                mediaType = PlaylistMediaType.AUDIO
-            )
-        )
-
         val initialPlaylists = listOf(
             UserPlaylist(
                 id = "pl_default_audio",
-                name = "My Favorite Tracks",
+                name = "Nyimbo Zangu",
                 type = PlaylistMediaType.AUDIO,
-                items = defaultAudioItems
+                items = emptyList()
             ),
             UserPlaylist(
                 id = "pl_default_video",
-                name = "Top Movie Clips",
+                name = "Video Zangu",
                 type = PlaylistMediaType.VIDEO,
-                items = defaultVideoVideos
+                items = emptyList()
             )
         )
         saveAllPlaylists(initialPlaylists)
@@ -423,24 +377,6 @@ class PlaylistManager private constructor(private val appContext: Context) {
             }
         } catch (_: Exception) {}
 
-        // 2. Demo Videos if none or as fallback additions
-        DemoVideoData.sampleVideos.forEach { sample ->
-            if (result.none { it.title.equals(sample.title, ignoreCase = true) }) {
-                result.add(
-                    PlaylistItemModel(
-                        id = sample.id,
-                        title = sample.title,
-                        uriString = sample.uriString,
-                        durationText = sample.durationText,
-                        durationMs = sample.durationMs,
-                        sizeText = sample.sizeText,
-                        subtitle = sample.folderName,
-                        mediaType = PlaylistMediaType.VIDEO
-                    )
-                )
-            }
-        }
-
         return result
     }
 
@@ -453,7 +389,7 @@ class PlaylistManager private constructor(private val appContext: Context) {
 
         val result = mutableListOf<PlaylistItemModel>()
 
-        // 1. Device MediaStore Audio
+        // Device MediaStore Audio
         try {
             val projection = arrayOf(
                 MediaStore.Audio.Media._ID,
@@ -510,33 +446,6 @@ class PlaylistManager private constructor(private val appContext: Context) {
                 }
             }
         } catch (_: Exception) {}
-
-        // 2. High-quality sample music tracks so user always has great audio to test
-        val sampleMusic = listOf(
-            Triple("Midnight City Echoes", "Electronic • Synthwave", 245000L),
-            Triple("Acoustic Sunset Guitar", "Acoustic • Relaxing", 310000L),
-            Triple("Lo-Fi Study Beats 2026", "Lo-Fi • Chillhop", 198000L),
-            Triple("Afro Rhythm Grooves", "Afrobeats • Dance", 225000L),
-            Triple("Deep House Lounge", "House • Club", 280000L),
-            Triple("Peaceful Piano Memories", "Classical • Piano", 260000L)
-        )
-
-        sampleMusic.forEachIndexed { idx, (title, subtitle, durMs) ->
-            if (result.none { it.title.equals(title, ignoreCase = true) }) {
-                result.add(
-                    PlaylistItemModel(
-                        id = "sample_audio_$idx",
-                        title = title,
-                        uriString = "",
-                        durationText = formatDuration(durMs),
-                        durationMs = durMs,
-                        sizeText = "6.${idx + 2} MB",
-                        subtitle = subtitle,
-                        mediaType = PlaylistMediaType.AUDIO
-                    )
-                )
-            }
-        }
 
         return result
     }

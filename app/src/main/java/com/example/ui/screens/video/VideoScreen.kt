@@ -68,6 +68,7 @@ import com.example.data.media.DemoVideoData
 import com.example.data.media.LocalVideoScanner
 import com.example.data.media.RecentlyPlayedManager
 import com.example.ui.components.F2WEmptyState
+import com.example.ui.components.permission.rememberMediaPermissionState
 import com.example.ui.theme.F2WCardBorder
 import com.example.ui.theme.F2WCyanPrimary
 import com.example.ui.theme.F2WSurface
@@ -75,6 +76,7 @@ import com.example.ui.theme.F2WSurfaceElevated
 import com.example.ui.theme.F2WTextPrimary
 import com.example.ui.theme.F2WTextSecondary
 import com.example.ui.theme.F2WTextTertiary
+import com.example.util.permission.MediaPermissionType
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -96,17 +98,13 @@ fun VideoScreen(
     val recentlyPlayedIds by recentlyPlayedManager.recentlyPlayedIds.collectAsState()
 
     var selectedFilter by remember { mutableStateOf(VideoFilterMode.ALL_VIDEO) }
-    var scannedVideos by remember {
-        mutableStateOf(if (videos.isNotEmpty()) videos else DemoVideoData.sampleVideos)
-    }
-    var scannedFolders by remember {
-        mutableStateOf(if (folders.isNotEmpty()) folders else DemoVideoData.sampleFolders)
-    }
+    var scannedVideos by remember { mutableStateOf(videos) }
+    var scannedFolders by remember { mutableStateOf(folders) }
     var isScanning by remember { mutableStateOf(false) }
     var activeVideoForMenu by remember { mutableStateOf<VideoItem?>(null) }
     var activeGroupDetail by remember { mutableStateOf<VideoNameGroup?>(null) }
     var activeFolderDetail by remember { mutableStateOf<VideoFolder?>(null) }
-    val favoriteVideoIds = remember { mutableStateListOf<String>("demo_avengers_endgame") }
+    val favoriteVideoIds = remember { mutableStateListOf<String>() }
 
     val vaultManager = remember { com.example.data.security.PrivacyVaultManager.getInstance(context) }
     var movedVaultPaths by remember {
@@ -155,54 +153,35 @@ fun VideoScreen(
         return
     }
 
-    val permissionToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        Manifest.permission.READ_MEDIA_VIDEO
-    } else {
-        Manifest.permission.READ_EXTERNAL_STORAGE
-    }
-
-    var hasPermission by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, permissionToRequest) == PackageManager.PERMISSION_GRANTED
-        )
-    }
-
     fun triggerScan() {
         coroutineScope.launch {
             isScanning = true
             val detectedVideos = scanner.scanDeviceVideos()
-            if (detectedVideos.isNotEmpty()) {
-                val detectedFolders = scanner.extractFolders(detectedVideos)
-                scannedVideos = detectedVideos
-                scannedFolders = detectedFolders
-            } else {
-                // Keep sample videos for testing if no physical video files exist on device
-                scannedVideos = DemoVideoData.sampleVideos
-                scannedFolders = DemoVideoData.sampleFolders
-            }
+            val detectedFolders = scanner.extractFolders(detectedVideos)
+            scannedVideos = detectedVideos
+            scannedFolders = detectedFolders
             isScanning = false
         }
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasPermission = granted
-        if (granted) {
+    // Media permissions state handler
+    val mediaPermissionState = rememberMediaPermissionState(
+        type = MediaPermissionType.VIDEO,
+        onPermissionGranted = {
             triggerScan()
         }
-    }
+    )
 
     // Initial load: If permission is already granted and no videos yet, trigger media scan
-    LaunchedEffect(hasPermission) {
-        if (hasPermission && scannedVideos.isEmpty()) {
+    LaunchedEffect(mediaPermissionState.hasAccess) {
+        if (mediaPermissionState.hasAccess && scannedVideos.isEmpty()) {
             triggerScan()
         }
     }
 
     // Automatically update the list when new videos are added to the device storage
-    DisposableEffect(hasPermission) {
-        if (!hasPermission) return@DisposableEffect onDispose {}
+    DisposableEffect(mediaPermissionState.hasAccess) {
+        if (!mediaPermissionState.hasAccess) return@DisposableEffect onDispose {}
 
         val contentObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
@@ -250,76 +229,79 @@ fun VideoScreen(
             .background(F2WSurface)
             .testTag("video_screen_container")
     ) {
+        // Fixed / Sticky Top Task Panel for Filter Pills
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(F2WSurface)
+                .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 6.dp)
+        ) {
+            // Row 1: [ All Video ] [ Group by Name ] [ Group by Folder ]
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilterPillButton(
+                    mode = VideoFilterMode.ALL_VIDEO,
+                    isSelected = selectedFilter == VideoFilterMode.ALL_VIDEO,
+                    onClick = { selectedFilter = VideoFilterMode.ALL_VIDEO }
+                )
+                FilterPillButton(
+                    mode = VideoFilterMode.GROUP_BY_NAME,
+                    isSelected = selectedFilter == VideoFilterMode.GROUP_BY_NAME,
+                    onClick = { selectedFilter = VideoFilterMode.GROUP_BY_NAME }
+                )
+                FilterPillButton(
+                    mode = VideoFilterMode.GROUP_BY_FOLDER,
+                    isSelected = selectedFilter == VideoFilterMode.GROUP_BY_FOLDER,
+                    onClick = { selectedFilter = VideoFilterMode.GROUP_BY_FOLDER }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Row 2: [ Recently Added ] [ Recently Played ]
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilterPillButton(
+                    mode = VideoFilterMode.RECENTLY_ADDED,
+                    isSelected = selectedFilter == VideoFilterMode.RECENTLY_ADDED,
+                    onClick = { selectedFilter = VideoFilterMode.RECENTLY_ADDED }
+                )
+                FilterPillButton(
+                    mode = VideoFilterMode.RECENTLY_PLAYED,
+                    isSelected = selectedFilter == VideoFilterMode.RECENTLY_PLAYED,
+                    onClick = { selectedFilter = VideoFilterMode.RECENTLY_PLAYED }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Divider Line below fixed panel
+            HorizontalDivider(
+                color = F2WCardBorder,
+                thickness = 1.dp
+            )
+        }
+
         LazyVerticalGrid(
             columns = GridCells.Fixed(columnsCount),
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
             contentPadding = PaddingValues(
                 start = 14.dp,
                 end = 14.dp,
-                top = 10.dp,
+                top = 6.dp,
                 bottom = 16.dp
             ),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header: 2 Rows of Filter Pill Buttons matching F2W design
-            item(span = { GridItemSpan(columnsCount) }) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    // Row 1: [ All Video ] [ Group by Name ] [ Group by Folder ]
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        FilterPillButton(
-                            mode = VideoFilterMode.ALL_VIDEO,
-                            isSelected = selectedFilter == VideoFilterMode.ALL_VIDEO,
-                            onClick = { selectedFilter = VideoFilterMode.ALL_VIDEO }
-                        )
-                        FilterPillButton(
-                            mode = VideoFilterMode.GROUP_BY_NAME,
-                            isSelected = selectedFilter == VideoFilterMode.GROUP_BY_NAME,
-                            onClick = { selectedFilter = VideoFilterMode.GROUP_BY_NAME }
-                        )
-                        FilterPillButton(
-                            mode = VideoFilterMode.GROUP_BY_FOLDER,
-                            isSelected = selectedFilter == VideoFilterMode.GROUP_BY_FOLDER,
-                            onClick = { selectedFilter = VideoFilterMode.GROUP_BY_FOLDER }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Row 2: [ Recently Added ] [ Recently Played ]
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        FilterPillButton(
-                            mode = VideoFilterMode.RECENTLY_ADDED,
-                            isSelected = selectedFilter == VideoFilterMode.RECENTLY_ADDED,
-                            onClick = { selectedFilter = VideoFilterMode.RECENTLY_ADDED }
-                        )
-                        FilterPillButton(
-                            mode = VideoFilterMode.RECENTLY_PLAYED,
-                            isSelected = selectedFilter == VideoFilterMode.RECENTLY_PLAYED,
-                            onClick = { selectedFilter = VideoFilterMode.RECENTLY_PLAYED }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Divider Line
-                    HorizontalDivider(
-                        color = F2WCardBorder,
-                        thickness = 1.dp
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-                }
-            }
-
             // Status bar showing active mode and video count
             item(span = { GridItemSpan(columnsCount) }) {
                 Row(
@@ -380,13 +362,13 @@ fun VideoScreen(
                             icon = Icons.Outlined.VideoLibrary,
                             title = "No Video Groups Found",
                             description = "Videos with matching or similar movie names will be automatically grouped here in 2 columns.",
-                            actionLabel = if (hasPermission) "Scan Device Videos" else "Grant Storage Permission",
+                            actionLabel = if (mediaPermissionState.hasAccess) "Scan Device Videos" else "Grant Storage Permission",
                             actionIcon = Icons.Filled.Refresh,
                             onActionClick = {
-                                if (hasPermission) {
+                                if (mediaPermissionState.hasAccess) {
                                     triggerScan()
                                 } else {
-                                    permissionLauncher.launch(permissionToRequest)
+                                    mediaPermissionState.requestPermissions()
                                 }
                                 onScanRequest()
                             },
@@ -419,13 +401,13 @@ fun VideoScreen(
                             icon = Icons.Outlined.VideoLibrary,
                             title = "No Video Folders Found",
                             description = "Video folders on your device (e.g. Movies, Downloads, Camera) will be displayed here in 2 columns once storage is scanned.",
-                            actionLabel = if (hasPermission) "Scan Device Videos" else "Grant Storage Permission",
+                            actionLabel = if (mediaPermissionState.hasAccess) "Scan Device Videos" else "Grant Storage Permission",
                             actionIcon = Icons.Filled.Refresh,
                             onActionClick = {
-                                if (hasPermission) {
+                                if (mediaPermissionState.hasAccess) {
                                     triggerScan()
                                 } else {
-                                    permissionLauncher.launch(permissionToRequest)
+                                    mediaPermissionState.requestPermissions()
                                 }
                                 onScanRequest()
                             },
@@ -470,13 +452,13 @@ fun VideoScreen(
                                 icon = Icons.Outlined.VideoLibrary,
                                 title = "No Local Videos Found",
                                 description = "Detected videos will be displayed in this clean view with posters, quality (4K/1080P/720P), duration, and playback progress.",
-                                actionLabel = if (hasPermission) "Scan Device Videos" else "Grant Storage Permission",
+                                actionLabel = if (mediaPermissionState.hasAccess) "Scan Device Videos" else "Grant Storage Permission",
                                 actionIcon = Icons.Filled.Refresh,
                                 onActionClick = {
-                                    if (hasPermission) {
+                                    if (mediaPermissionState.hasAccess) {
                                         triggerScan()
                                     } else {
-                                        permissionLauncher.launch(permissionToRequest)
+                                        mediaPermissionState.requestPermissions()
                                     }
                                     onScanRequest()
                                 },

@@ -1,6 +1,9 @@
 package com.example.ui
 
+import android.content.Context
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -41,6 +44,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,11 +55,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.media.DemoVideoData
+import com.example.data.media.LocalVideoScanner
 import com.example.ui.components.F2WTopBar
 import com.example.ui.navigation.FloatingNavBar
 import com.example.ui.navigation.NavTab
@@ -68,6 +74,7 @@ import com.example.ui.screens.settings.SettingsScreen
 import com.example.ui.screens.theme.ThemePickerScreen
 import com.example.ui.screens.video.VideoItem
 import com.example.ui.screens.video.VideoScreen
+import com.example.ui.screens.video.VideoSearchOverlayScreen
 import com.example.ui.theme.F2WBackground
 import com.example.ui.theme.F2WCardBorder
 import com.example.ui.theme.F2WCyanPrimary
@@ -77,6 +84,8 @@ import com.example.ui.theme.F2WTextPrimary
 import com.example.ui.theme.F2WTextSecondary
 import com.example.ui.theme.F2WTextTertiary
 import com.example.ui.theme.F2WVioletAccent
+import com.example.util.permission.MediaPermissionManager
+import com.example.util.permission.MediaPermissionType
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -87,15 +96,42 @@ fun MainScreen(
     onToggleOrientation: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+
+    // Request permissions on first launch only
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        // Permissions handled on first launch
+    }
+
+    LaunchedEffect(Unit) {
+        val prefs = context.getSharedPreferences("f2w_app_prefs", Context.MODE_PRIVATE)
+        val hasRequestedBefore = prefs.getBoolean("has_prompted_media_permissions", false)
+        val hasAccess = MediaPermissionManager.hasMediaAccess(context, MediaPermissionType.ALL_MEDIA)
+        if (!hasAccess && !hasRequestedBefore) {
+            prefs.edit().putBoolean("has_prompted_media_permissions", true).apply()
+            val required = MediaPermissionManager.getRequiredPermissions(MediaPermissionType.ALL_MEDIA)
+            permissionLauncher.launch(required)
+        }
+    }
+
     // Video tab is selected by default as required
+    val scanner = remember { LocalVideoScanner(context) }
+    var allScannedVideos by remember { mutableStateOf<List<VideoItem>>(emptyList()) }
+
+    LaunchedEffect(Unit) {
+        val scanned = scanner.scanDeviceVideos()
+        allScannedVideos = scanned
+    }
+
     var selectedTab by remember { mutableStateOf(NavTab.VIDEO) }
     var showSearchDialog by remember { mutableStateOf(false) }
     var showSettingsPage by remember { mutableStateOf(false) }
     var showThemePicker by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
     var isListView by remember { mutableStateOf(false) }
     var activePlayingVideo by remember { mutableStateOf<VideoItem?>(null) }
-    var currentVideoPlaylist by remember { mutableStateOf<List<VideoItem>>(DemoVideoData.sampleVideos) }
+    var currentVideoPlaylist by remember { mutableStateOf<List<VideoItem>>(emptyList()) }
     var isFloatingMiniPlayer by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -239,75 +275,15 @@ fun MainScreen(
         }
     }
 
-    // Search Dialog
+    // Search Screen Overlay
     if (showSearchDialog) {
-        AlertDialog(
-            onDismissRequest = { showSearchDialog = false },
-            containerColor = F2WSurfaceElevated,
-            title = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Search Media",
-                        color = F2WTextPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    IconButton(
-                        onClick = { showSearchDialog = false },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = "Close",
-                            tint = F2WTextSecondary
-                        )
-                    }
-                }
-            },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = { Text("Search videos, audio, artists...", color = F2WTextTertiary) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Outlined.Search,
-                                contentDescription = null,
-                                tint = F2WCyanPrimary
-                            )
-                        },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = F2WCyanPrimary,
-                            unfocusedBorderColor = F2WCardBorder,
-                            focusedTextColor = F2WTextPrimary,
-                            unfocusedTextColor = F2WTextPrimary
-                        ),
-                        modifier = Modifier.fillMaxWidth().testTag("media_search_input")
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = "Instant search will index local files as soon as storage is scanned.",
-                        color = F2WTextTertiary,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { showSearchDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = F2WCyanPrimary),
-                    modifier = Modifier.testTag("submit_search_btn")
-                ) {
-                    Text("Search", color = Color(0xFF070B12), fontWeight = FontWeight.Bold)
-                }
+        VideoSearchOverlayScreen(
+            allVideos = allScannedVideos,
+            onBack = { showSearchDialog = false },
+            onVideoClick = { clickedVideo ->
+                currentVideoPlaylist = allScannedVideos
+                activePlayingVideo = clickedVideo
+                showSearchDialog = false
             }
         )
     }

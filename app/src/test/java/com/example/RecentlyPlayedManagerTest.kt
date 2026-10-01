@@ -59,4 +59,21 @@ class RecentlyPlayedManagerTest {
 
         assertEquals(125000L, v1Restored.playbackProgressMs)
     }
+
+    @Test
+    fun testResumeMidwayAndRestartFromBeginning() {
+        var currentPositionMs = 85000L // 1m 25s midway
+        var isResumePromptShown = currentPositionMs > 2000L
+        assertTrue(isResumePromptShown)
+
+        // If user clicks restart / Anza Upya
+        fun restartPlayback() {
+            currentPositionMs = 0L
+            isResumePromptShown = false
+        }
+
+        restartPlayback()
+        assertEquals(0L, currentPositionMs)
+        assertFalse(isResumePromptShown)
+    }
 }

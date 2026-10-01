@@ -3,7 +3,9 @@
 package com.example.ui.screens.player
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -11,6 +13,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,6 +22,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.displayCutoutPadding
@@ -36,12 +41,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.FitScreen
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreVert
@@ -49,11 +56,14 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.VolumeMute
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -62,6 +72,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -642,3 +653,94 @@ fun AudioModeVisualizer(
         }
     }
 }
+
+/**
+ * A compact, pill-shaped overlay that matches XPlayer:
+ * "✕  Continue playing from where you stopped.  |  Start Over"
+ * Automatically dismisses after 5 seconds while video playback continues uninterrupted.
+ */
+@Composable
+fun ResumePlaybackPromptOverlay(
+    visible: Boolean,
+    onRestartClick: () -> Unit,
+    onDismissClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(250)) + slideInVertically(tween(300)) { it / 2 },
+        exit = fadeOut(tween(250)) + slideOutVertically(tween(300)) { it / 2 },
+        modifier = modifier
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color.Black.copy(alpha = 0.88f))
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.25f),
+                    shape = RoundedCornerShape(24.dp)
+                )
+                .testTag("resume_playback_prompt")
+        ) {
+            Row(
+                modifier = Modifier.padding(start = 10.dp, end = 12.dp, top = 7.dp, bottom = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // ✕ Dismiss icon
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Dismiss",
+                    tint = Color.White.copy(alpha = 0.9f),
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple(bounded = false, radius = 14.dp),
+                            onClick = onDismissClick
+                        )
+                        .testTag("dismiss_resume_prompt_btn")
+                )
+
+                // Message Text
+                Text(
+                    text = "Continue playing from where you stopped.",
+                    color = Color.White,
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                // Vertical Divider Line "|"
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(13.dp)
+                        .background(Color.White.copy(alpha = 0.3f))
+                )
+
+                // "Start Over" button
+                Text(
+                    text = "Start Over",
+                    color = Color(0xFFE040FB), // Magenta accent matching XPlayer
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple(bounded = true),
+                            onClick = onRestartClick
+                        )
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                        .testTag("restart_video_btn")
+                )
+            }
+        }
+    }
+}
+

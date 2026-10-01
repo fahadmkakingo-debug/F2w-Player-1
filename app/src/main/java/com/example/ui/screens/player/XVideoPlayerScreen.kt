@@ -131,6 +131,11 @@ fun XVideoPlayerScreen(
     var showMoreSheet by remember { mutableStateOf(false) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
 
+    // Resume Playback Prompt States
+    var showResumePrompt by remember { mutableStateOf(false) }
+    var resumedPositionMs by remember { mutableLongStateOf(0L) }
+    var resumePromptKey by remember { mutableIntStateOf(0) }
+
     // Reference to PlayerView for aspect ratio adjustments
     var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
 
@@ -154,15 +159,29 @@ fun XVideoPlayerScreen(
         val savedPos = recentlyPlayedManager.getPlaybackPosition(currentVideo.id).let { pos ->
             if (pos > 0L) pos else currentVideo.playbackProgressMs
         }
-        if (savedPos > 0L) {
+        if (savedPos > 2000L) {
             exoPlayer.seekTo(savedPos)
             currentPositionMs = savedPos
+            resumedPositionMs = savedPos
+            showResumePrompt = true
+            resumePromptKey++
+        } else {
+            showResumePrompt = false
         }
 
         // Move to the top of Recently Played
         recentlyPlayedManager.recordVideoPlayed(currentVideo.id, savedPos)
 
+        // Start playback immediately without waiting for user confirmation
         exoPlayer.play()
+    }
+
+    // Auto-dismiss the resume prompt after 5 seconds while video playback continues uninterrupted
+    LaunchedEffect(showResumePrompt, resumePromptKey) {
+        if (showResumePrompt) {
+            delay(5000)
+            showResumePrompt = false
+        }
     }
 
     // Sync Player Position & State periodically
@@ -698,6 +717,23 @@ fun XVideoPlayerScreen(
                     )
                 }
             }
+
+            // 7. Resume Playback Overlay (Auto-dismisses in 5s or restarts from 00:00)
+            ResumePlaybackPromptOverlay(
+                visible = showResumePrompt,
+                onRestartClick = {
+                    seekToPosition(0L)
+                    recentlyPlayedManager.savePlaybackPosition(currentVideo.id, 0L)
+                    showResumePrompt = false
+                },
+                onDismissClick = {
+                    showResumePrompt = false
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = if (areControlsVisible && !isLocked) 84.dp else 24.dp)
+            )
         }
     }
 
