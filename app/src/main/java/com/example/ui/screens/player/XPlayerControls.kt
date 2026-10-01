@@ -1,6 +1,14 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.example.ui.screens.player
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -12,27 +20,33 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ClosedCaption
+import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.FitScreen
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.HighQuality
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.ScreenRotation
@@ -48,6 +62,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,6 +76,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.F2WCyanPrimary
+import com.example.ui.theme.F2WTextSecondary
 import com.example.ui.theme.F2WVioletAccent
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -81,11 +97,14 @@ fun XPlayerTopBar(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color.Black.copy(alpha = 0.85f),
+                        Color.Black.copy(alpha = 0.95f),
+                        Color.Black.copy(alpha = 0.7f),
                         Color.Transparent
                     )
                 )
             )
+            .statusBarsPadding()
+            .displayCutoutPadding()
             .padding(horizontal = 8.dp, vertical = 6.dp)
     ) {
         Row(
@@ -99,7 +118,7 @@ fun XPlayerTopBar(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = "Rudi Nyuma",
                     tint = Color.White
                 )
             }
@@ -122,32 +141,33 @@ fun XPlayerTopBar(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
+                    .background(Color.White.copy(alpha = 0.12f))
                     .clickable(onClick = onDecoderClick)
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Filled.HighQuality,
                         contentDescription = "Decoder",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        tint = F2WCyanPrimary,
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(3.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = decoderMode,
                         color = Color.White,
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-            // 2. Subtitles [CC]
+            // 2. Subtitles & Audio [CC]
             IconButton(onClick = onSubtitlesClick) {
                 Icon(
                     imageVector = Icons.Filled.ClosedCaption,
-                    contentDescription = "Subtitles",
+                    contentDescription = "Subtitles na Sauti",
                     tint = Color.White,
                     modifier = Modifier.size(22.dp)
                 )
@@ -157,17 +177,17 @@ fun XPlayerTopBar(
             IconButton(onClick = onPlaylistClick) {
                 Icon(
                     imageVector = Icons.Filled.QueueMusic,
-                    contentDescription = "Playlist Queue",
+                    contentDescription = "Orodha ya Video",
                     tint = Color.White,
                     modifier = Modifier.size(22.dp)
                 )
             }
 
-            // 4. Overflow Menu (Three Dots)
+            // 4. More Options
             IconButton(onClick = onMoreClick) {
                 Icon(
                     imageVector = Icons.Filled.MoreVert,
-                    contentDescription = "More",
+                    contentDescription = "Chaguo Zaidi",
                     tint = Color.White,
                     modifier = Modifier.size(22.dp)
                 )
@@ -181,26 +201,30 @@ fun XPlayerQuickControlsRow(
     isOrientationLocked: Boolean,
     isMuted: Boolean,
     isBackgroundAudio: Boolean,
+    aspectRatioText: String,
     speedText: String,
     onOrientationToggle: () -> Unit,
     onMuteToggle: () -> Unit,
     onBackgroundAudioToggle: () -> Unit,
+    onAspectRatioClick: () -> Unit,
     onSpeedClick: () -> Unit,
-    onExpandClick: () -> Unit,
+    onPipClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
         modifier = modifier
-            .padding(horizontal = 14.dp, vertical = 2.dp),
+            .fillMaxWidth()
+            .displayCutoutPadding()
+            .padding(horizontal = 14.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 1. Orientation Lock
+        // 1. Rotation Lock
         QuickCircleButton(
             icon = Icons.Filled.ScreenRotation,
             isActive = isOrientationLocked,
             onClick = onOrientationToggle,
-            contentDescription = "Rotation Lock"
+            contentDescription = "Mzunguko wa Skrini"
         )
 
         // 2. Quick Mute
@@ -208,42 +232,74 @@ fun XPlayerQuickControlsRow(
             icon = if (isMuted) Icons.Filled.VolumeMute else Icons.Filled.VolumeUp,
             isActive = isMuted,
             onClick = onMuteToggle,
-            contentDescription = "Mute"
+            contentDescription = "Sauti"
         )
 
-        // 3. Background Audio Play
+        // 3. Background Play (Headphones)
         QuickCircleButton(
             icon = Icons.Filled.Headphones,
             isActive = isBackgroundAudio,
             onClick = onBackgroundAudioToggle,
-            contentDescription = "Background Audio"
+            contentDescription = "Background Play (Audio)"
         )
 
-        // 4. Playback Speed Button (e.g. "1X")
+        // 4. Pop-up / Floating Window (PiP)
+        QuickCircleButton(
+            icon = Icons.Filled.PictureInPictureAlt,
+            isActive = false,
+            onClick = onPipClick,
+            contentDescription = "Pop-up / Floating Window (PiP)"
+        )
+
+        // 5. Playback Speed Button (e.g. "1.0X", "1.5X")
         Box(
             modifier = Modifier
-                .size(42.dp)
+                .size(40.dp)
                 .clip(CircleShape)
-                .background(Color(0x661E1E1E))
-                .border(1.dp, Color.White.copy(alpha = 0.25f), CircleShape)
+                .background(if (speedText != "1X" && speedText != "1.0X") F2WCyanPrimary.copy(alpha = 0.25f) else Color(0x661E1E1E))
+                .border(
+                    1.dp,
+                    if (speedText != "1X" && speedText != "1.0X") F2WCyanPrimary else Color.White.copy(alpha = 0.3f),
+                    CircleShape
+                )
                 .clickable(onClick = onSpeedClick),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = speedText,
-                color = if (speedText != "1X") F2WCyanPrimary else Color.White,
-                fontSize = 12.sp,
+                color = if (speedText != "1X" && speedText != "1.0X") F2WCyanPrimary else Color.White,
+                fontSize = 11.5.sp,
                 fontWeight = FontWeight.Bold
             )
         }
 
-        // 5. Expand Quick Options
-        QuickCircleButton(
-            icon = Icons.Filled.KeyboardArrowRight,
-            isActive = false,
-            onClick = onExpandClick,
-            contentDescription = "More Quick Options"
-        )
+        // 6. Aspect Ratio Switcher (Fit, 16:9, Stretch)
+        Box(
+            modifier = Modifier
+                .height(40.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0x661E1E1E))
+                .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
+                .clickable(onClick = onAspectRatioClick)
+                .padding(horizontal = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.AspectRatio,
+                    contentDescription = "Aspect Ratio",
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = aspectRatioText,
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
     }
 }
 
@@ -256,12 +312,12 @@ private fun QuickCircleButton(
 ) {
     Box(
         modifier = Modifier
-            .size(42.dp)
+            .size(40.dp)
             .clip(CircleShape)
             .background(if (isActive) F2WCyanPrimary.copy(alpha = 0.35f) else Color(0x661E1E1E))
             .border(
                 1.dp,
-                if (isActive) F2WCyanPrimary else Color.White.copy(alpha = 0.25f),
+                if (isActive) F2WCyanPrimary else Color.White.copy(alpha = 0.3f),
                 CircleShape
             )
             .clickable(onClick = onClick),
@@ -271,7 +327,7 @@ private fun QuickCircleButton(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = if (isActive) F2WCyanPrimary else Color.White,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(19.dp)
         )
     }
 }
@@ -285,15 +341,15 @@ fun XPlayerScreenshotButton(
         modifier = modifier
             .size(44.dp)
             .clip(CircleShape)
-            .background(Color(0x661E1E1E))
-            .border(1.dp, Color.White.copy(alpha = 0.25f), CircleShape)
+            .background(Color.Black.copy(alpha = 0.55f))
+            .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape)
             .clickable(onClick = onClick)
             .testTag("player_screenshot_btn"),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = Icons.Filled.CameraAlt,
-            contentDescription = "Take Screenshot",
+            contentDescription = "Piga Picha ya Skrini",
             tint = Color.White,
             modifier = Modifier.size(22.dp)
         )
@@ -312,7 +368,7 @@ fun XPlayerBottomBar(
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
-    onFullscreenToggle: () -> Unit,
+    onPipToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -322,39 +378,43 @@ fun XPlayerBottomBar(
                 Brush.verticalGradient(
                     colors = listOf(
                         Color.Transparent,
-                        Color.Black.copy(alpha = 0.9f)
+                        Color.Black.copy(alpha = 0.7f),
+                        Color.Black.copy(alpha = 0.98f)
                     )
                 )
             )
+            .navigationBarsPadding()
             .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             // Row 1: Time & Seekbar
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Current Position Text
                 Text(
                     text = currentTimeText,
                     color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.width(46.dp)
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Normal,
+                    modifier = Modifier.padding(end = 8.dp)
                 )
 
-                // Seekbar Slider with vibrant gradient/color
+                // Seekbar Slider without tall thumb line (smooth touch-and-drag directly on track)
                 Slider(
                     value = progress.coerceIn(0f, 1f),
                     onValueChange = onSeek,
+                    thumb = {},
                     colors = SliderDefaults.colors(
-                        thumbColor = Color.White,
-                        activeTrackColor = F2WVioletAccent,
-                        inactiveTrackColor = Color.White.copy(alpha = 0.25f)
+                        thumbColor = Color.Transparent,
+                        activeTrackColor = Color(0xFFC0157B),
+                        inactiveTrackColor = Color(0xFF7E8088)
                     ),
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 4.dp)
                         .testTag("player_seekbar")
                 )
 
@@ -362,15 +422,15 @@ fun XPlayerBottomBar(
                 Text(
                     text = totalDurationText,
                     color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.width(46.dp)
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Normal,
+                    modifier = Modifier.padding(start = 8.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-            // Row 2: Action Controls (Lock, Prev, Play/Pause, Next, Fullscreen)
+            // Row 2: Action Controls (Kid Lock, Prev, Big Play/Pause, Next, Pop-up Window)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -378,11 +438,11 @@ fun XPlayerBottomBar(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 1. Screen Lock Button
+                // 1. Kid Lock / Screen Lock Button
                 IconButton(onClick = onLockToggle) {
                     Icon(
                         imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.LockOpen,
-                        contentDescription = "Screen Lock",
+                        contentDescription = "Kid Lock / Funga Skrini",
                         tint = if (isLocked) F2WCyanPrimary else Color.White,
                         modifier = Modifier.size(24.dp)
                     )
@@ -392,18 +452,18 @@ fun XPlayerBottomBar(
                 IconButton(onClick = onPrevious) {
                     Icon(
                         imageVector = Icons.Filled.SkipPrevious,
-                        contentDescription = "Previous",
+                        contentDescription = "Video Iliyopita",
                         tint = Color.White,
-                        modifier = Modifier.size(30.dp)
+                        modifier = Modifier.size(32.dp)
                     )
                 }
 
                 // 3. Center Big Play/Pause Button
                 Box(
                     modifier = Modifier
-                        .size(54.dp)
+                        .size(56.dp)
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.15f))
+                        .background(Color.White.copy(alpha = 0.18f))
                         .border(1.5.dp, Color.White, CircleShape)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
@@ -415,9 +475,9 @@ fun XPlayerBottomBar(
                 ) {
                     Icon(
                         imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        contentDescription = if (isPlaying) "Simamisha" else "Cheza",
                         tint = Color.White,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(34.dp)
                     )
                 }
 
@@ -425,19 +485,19 @@ fun XPlayerBottomBar(
                 IconButton(onClick = onNext) {
                     Icon(
                         imageVector = Icons.Filled.SkipNext,
-                        contentDescription = "Next",
+                        contentDescription = "Video Inayofuata",
                         tint = Color.White,
-                        modifier = Modifier.size(30.dp)
+                        modifier = Modifier.size(32.dp)
                     )
                 }
 
-                // 5. Fullscreen / Aspect Ratio Button
-                IconButton(onClick = onFullscreenToggle) {
+                // 5. Pop-up / Floating Window (PiP)
+                IconButton(onClick = onPipToggle) {
                     Icon(
-                        imageVector = Icons.Filled.Fullscreen,
-                        contentDescription = "Aspect Ratio",
+                        imageVector = Icons.Filled.PictureInPictureAlt,
+                        contentDescription = "Pop-up / Floating Window (PiP)",
                         tint = Color.White,
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
@@ -452,19 +512,133 @@ fun XPlayerLockedFloatingButton(
 ) {
     Box(
         modifier = modifier
-            .size(50.dp)
-            .clip(CircleShape)
-            .background(Color.Black.copy(alpha = 0.65f))
-            .border(1.5.dp, F2WCyanPrimary, CircleShape)
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color.Black.copy(alpha = 0.8f))
+            .border(1.5.dp, F2WCyanPrimary, RoundedCornerShape(24.dp))
             .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp)
             .testTag("player_unlock_floating_btn"),
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = Icons.Filled.Lock,
-            contentDescription = "Unlock Controls",
-            tint = F2WCyanPrimary,
-            modifier = Modifier.size(24.dp)
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Filled.Lock,
+                contentDescription = "Fungua Skrini",
+                tint = F2WCyanPrimary,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Gusa kufungua (Unlock)",
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+fun AudioModeVisualizer(
+    title: String,
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val transition = rememberInfiniteTransition(label = "audio_anim")
+    val height1 by transition.animateFloat(
+        initialValue = 12f,
+        targetValue = 48f,
+        animationSpec = infiniteRepeatable(tween(400, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "h1"
+    )
+    val height2 by transition.animateFloat(
+        initialValue = 20f,
+        targetValue = 64f,
+        animationSpec = infiniteRepeatable(tween(550, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "h2"
+    )
+    val height3 by transition.animateFloat(
+        initialValue = 8f,
+        targetValue = 36f,
+        animationSpec = infiniteRepeatable(tween(350, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "h3"
+    )
+    val height4 by transition.animateFloat(
+        initialValue = 16f,
+        targetValue = 54f,
+        animationSpec = infiniteRepeatable(tween(480, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "h4"
+    )
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFF0F1012)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(90.dp)
+                    .clip(CircleShape)
+                    .background(F2WCyanPrimary.copy(alpha = 0.15f))
+                    .border(2.dp, F2WCyanPrimary, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Headphones,
+                    contentDescription = null,
+                    tint = F2WCyanPrimary,
+                    modifier = Modifier.size(46.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = title,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 24.dp)
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "Modi ya Sauti Tu (Inaokoa betri na skrini)",
+                color = F2WTextSecondary,
+                fontSize = 12.sp
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Animated Equalizer Bars
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.Bottom,
+                modifier = Modifier.height(70.dp)
+            ) {
+                listOf(height1, height2, height4, height3, height2, height1, height4).forEach { h ->
+                    val animH = if (isPlaying) h else 8f
+                    Box(
+                        modifier = Modifier
+                            .width(6.dp)
+                            .height(animH.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(F2WCyanPrimary, F2WVioletAccent)
+                                )
+                            )
+                    )
+                }
+            }
+        }
     }
 }

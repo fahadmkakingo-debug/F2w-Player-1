@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -50,6 +52,8 @@ import com.example.ui.theme.F2WTextSecondary
 fun F2WTopBar(
     subtitle: String = "Local Media Player",
     onSearchClick: () -> Unit,
+    isListView: Boolean = false,
+    onToggleViewMode: () -> Unit = {},
     onThemeClick: () -> Unit = {},
     onRefreshClick: () -> Unit = {},
     onEqualiserClick: () -> Unit = {},
@@ -123,11 +127,34 @@ fun F2WTopBar(
                 }
             }
 
-            // Right: Rounded Search & More Options Buttons with Popup Menu
+            // Right: Rounded Grid/List, Search & More Options Buttons with Popup Menu
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // View Mode Toggle Button (Grid vs List) right beside search
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (isListView) primaryColor.copy(alpha = 0.18f) else elevatedColor)
+                        .border(
+                            1.dp,
+                            if (isListView) primaryColor else borderColor,
+                            RoundedCornerShape(14.dp)
+                        )
+                        .clickable(onClick = onToggleViewMode)
+                        .testTag("view_mode_toggle_button"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isListView) Icons.Filled.GridView else Icons.AutoMirrored.Filled.ViewList,
+                        contentDescription = if (isListView) "Badili Gridi" else "Badili Orodha (List)",
+                        tint = if (isListView) primaryColor else textPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
                 // Search Button
                 Box(
                     modifier = Modifier

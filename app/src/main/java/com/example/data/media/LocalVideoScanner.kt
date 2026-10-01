@@ -28,6 +28,7 @@ class LocalVideoScanner(private val context: Context) {
             MediaStore.Video.Media.WIDTH,
             MediaStore.Video.Media.HEIGHT,
             MediaStore.Video.Media.DATE_ADDED,
+            MediaStore.Video.Media.DATE_MODIFIED,
             MediaStore.Video.Media.BUCKET_DISPLAY_NAME
         )
 
@@ -51,6 +52,7 @@ class LocalVideoScanner(private val context: Context) {
                 val widthCol = it.getColumnIndex(MediaStore.Video.Media.WIDTH)
                 val heightCol = it.getColumnIndex(MediaStore.Video.Media.HEIGHT)
                 val dateAddedCol = it.getColumnIndex(MediaStore.Video.Media.DATE_ADDED)
+                val dateModifiedCol = it.getColumnIndex(MediaStore.Video.Media.DATE_MODIFIED)
                 val bucketCol = it.getColumnIndex(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)
 
                 val yearPattern = Pattern.compile("\\b(19\\d\\d|20\\d\\d)\\b")
@@ -63,7 +65,9 @@ class LocalVideoScanner(private val context: Context) {
                     val sizeBytes = if (sizeCol != -1) it.getLong(sizeCol) else 0L
                     val width = if (widthCol != -1) it.getInt(widthCol) else 0
                     val height = if (heightCol != -1) it.getInt(heightCol) else 0
-                    val dateAdded = if (dateAddedCol != -1) it.getLong(dateAddedCol) else 0L
+                    val dateAddedRaw = if (dateAddedCol != -1) it.getLong(dateAddedCol) else 0L
+                    val dateModifiedRaw = if (dateModifiedCol != -1) it.getLong(dateModifiedCol) else 0L
+                    val dateAdded = if (dateAddedRaw > 0L) dateAddedRaw else dateModifiedRaw
                     val folderName = if (bucketCol != -1) it.getString(bucketCol) ?: "Internal Storage" else "Internal Storage"
 
                     val fileName = rawName ?: rawTitle ?: "Video_$id"
@@ -133,7 +137,8 @@ class LocalVideoScanner(private val context: Context) {
                     id = folderName,
                     name = folderName,
                     videoCount = items.size,
-                    path = folderName
+                    path = folderName,
+                    videos = items
                 )
             }
             .sortedByDescending { it.videoCount }

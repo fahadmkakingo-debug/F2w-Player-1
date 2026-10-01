@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
@@ -30,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -51,54 +51,38 @@ fun FloatingNavBar(
     onTabSelected: (NavTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(
+    // Docked bottom navigation bar extending all the way to the bottom edge of the screen
+    // so no content or videos peek underneath it, while preserving safe insets for Android system navigation.
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        // Floating 3D Navigation Card
-        Box(
-            modifier = Modifier
-                .widthIn(max = 500.dp)
-                .fillMaxWidth()
-                // Soft dual-layer ambient and spot shadow for 3D elevation
-                .shadow(
-                    elevation = 20.dp,
-                    shape = RoundedCornerShape(28.dp),
-                    spotColor = Color(0xCC000000),
-                    ambientColor = Color(0x66000000)
-                )
-                .clip(RoundedCornerShape(28.dp))
-                // 3D Glass / Metallic dual highlight border
-                .border(
-                    width = 1.dp,
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0x55FFFFFF),      // Crisp top rim light (3D specular)
-                            F2WBorderGlow.copy(alpha = 0.4f),
-                            F2WCardBorder.copy(alpha = 0.2f),
-                            Color(0x15FFFFFF)       // Subtle bottom reflection
-                        )
-                    ),
-                    shape = RoundedCornerShape(28.dp)
-                )
-                // Dark frosted obsidian surface with top sheen
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xF5182030), // Slightly brighter top for 3D depth
-                            F2WNavBackground,  // Rich dark obsidian core
-                            Color(0xF50D111A)  // Deep grounded bottom
-                        )
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF141923),
+                        Color(0xFF0C1018)
                     )
                 )
-                .padding(horizontal = 8.dp, vertical = 7.dp)
-                .testTag("floating_bottom_navigation_card")
+            )
+            .testTag("docked_bottom_navigation_bar")
+    ) {
+        // Crisp top highlight line separating content from bottom bar
+        HorizontalDivider(
+            color = Color.White.copy(alpha = 0.12f),
+            thickness = 1.dp
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding() // Ensures buttons don't collide with phone's navigation bar
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            contentAlignment = Alignment.Center
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 560.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -173,18 +157,18 @@ private fun NavCardItem(
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(16.dp))
             .then(
                 if (isSelected) {
                     Modifier
                         .border(
                             width = 1.dp,
                             brush = pillBorderBrush,
-                            shape = RoundedCornerShape(20.dp)
+                            shape = RoundedCornerShape(16.dp)
                         )
                         .background(
                             brush = pillBackgroundBrush,
-                            shape = RoundedCornerShape(20.dp)
+                            shape = RoundedCornerShape(16.dp)
                         )
                 } else Modifier
             )
@@ -193,7 +177,7 @@ private fun NavCardItem(
                 indication = ripple(color = F2WCyanPrimary, bounded = true),
                 onClick = onClick
             )
-            .padding(vertical = 8.dp, horizontal = 4.dp)
+            .padding(vertical = 6.dp, horizontal = 4.dp)
             .testTag(tab.testTag),
         contentAlignment = Alignment.Center
     ) {
@@ -206,7 +190,7 @@ private fun NavCardItem(
                 contentDescription = tab.title,
                 tint = iconColor,
                 modifier = Modifier
-                    .size(23.dp)
+                    .size(24.dp)
                     .scale(iconScale)
             )
 

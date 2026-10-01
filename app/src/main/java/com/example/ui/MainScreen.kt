@@ -60,6 +60,7 @@ import com.example.ui.components.F2WTopBar
 import com.example.ui.navigation.FloatingNavBar
 import com.example.ui.navigation.NavTab
 import com.example.ui.screens.audio.AudioScreen
+import com.example.ui.screens.player.InAppFloatingPlayer
 import com.example.ui.screens.player.XVideoPlayerScreen
 import com.example.ui.screens.playlist.PlaylistScreen
 import com.example.ui.screens.privacy.PrivacyScreen
@@ -81,6 +82,9 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
+    isInPipMode: Boolean = false,
+    onRequestPip: () -> Unit = {},
+    onToggleOrientation: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Video tab is selected by default as required
@@ -89,17 +93,29 @@ fun MainScreen(
     var showSettingsPage by remember { mutableStateOf(false) }
     var showThemePicker by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    var isListView by remember { mutableStateOf(false) }
     var activePlayingVideo by remember { mutableStateOf<VideoItem?>(null) }
+    var currentVideoPlaylist by remember { mutableStateOf<List<VideoItem>>(DemoVideoData.sampleVideos) }
+    var isFloatingMiniPlayer by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
-    // Fullscreen XPlayer when a video is clicked
-    if (activePlayingVideo != null) {
+    // Fullscreen XPlayer when a video is clicked and not in mini-player mode
+    if (activePlayingVideo != null && (!isFloatingMiniPlayer || isInPipMode)) {
         XVideoPlayerScreen(
             video = activePlayingVideo!!,
-            allVideos = DemoVideoData.sampleVideos,
-            onBack = { activePlayingVideo = null },
+            allVideos = currentVideoPlaylist,
+            isInPipMode = isInPipMode,
+            onRequestPip = {
+                onRequestPip()
+                isFloatingMiniPlayer = true
+            },
+            onToggleOrientation = onToggleOrientation,
+            onBack = {
+                activePlayingVideo = null
+                isFloatingMiniPlayer = false
+            },
             onVideoChange = { activePlayingVideo = it }
         )
         return
@@ -139,6 +155,8 @@ fun MainScreen(
             F2WTopBar(
                 subtitle = subtitle,
                 onSearchClick = { showSearchDialog = true },
+                isListView = isListView,
+                onToggleViewMode = { isListView = !isListView },
                 onThemeClick = { showThemePicker = true },
                 onRefreshClick = {
                     coroutineScope.launch {
@@ -151,6 +169,12 @@ fun MainScreen(
                     }
                 },
                 onSettingsClick = { showSettingsPage = true }
+            )
+        },
+        bottomBar = {
+            FloatingNavBar(
+                selectedTab = selectedTab,
+                onTabSelected = { selectedTab = it }
             )
         }
     ) { innerPadding ->
@@ -175,6 +199,8 @@ fun MainScreen(
                                 snackbarHostState.showSnackbar("Local storage scanner initialized for video discovery.")
                             }
                         },
+                        isListView = isListView,
+                        onToggleViewMode = { isListView = !isListView },
                         onVideoClick = { clickedVideo ->
                             activePlayingVideo = clickedVideo
                         }
@@ -186,17 +212,30 @@ fun MainScreen(
                             }
                         }
                     )
-                    NavTab.PLAYLIST -> PlaylistScreen()
+                    NavTab.PLAYLIST -> PlaylistScreen(
+                        onPlayVideoPlaylist = { playlistVideos, startIndex ->
+                            currentVideoPlaylist = playlistVideos
+                            activePlayingVideo = playlistVideos.getOrNull(startIndex) ?: playlistVideos.firstOrNull()
+                        }
+                    )
                     NavTab.PRIVACY -> PrivacyScreen()
                 }
             }
 
-            // Premium 3D Floating Bottom Navigation Card
-            FloatingNavBar(
-                selectedTab = selectedTab,
-                onTabSelected = { selectedTab = it },
-                modifier = Modifier.align(Alignment.BottomCenter)
-            )
+            // In-App Floating Mini-Player when minimized
+            if (activePlayingVideo != null && isFloatingMiniPlayer) {
+                InAppFloatingPlayer(
+                    video = activePlayingVideo!!,
+                    onExpand = { isFloatingMiniPlayer = false },
+                    onClose = {
+                        activePlayingVideo = null
+                        isFloatingMiniPlayer = false
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(bottom = 12.dp, end = 16.dp)
+                )
+            }
         }
     }
 

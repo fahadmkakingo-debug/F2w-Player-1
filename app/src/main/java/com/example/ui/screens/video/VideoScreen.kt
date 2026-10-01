@@ -2,7 +2,11 @@ package com.example.ui.screens.video
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.database.ContentObserver
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -30,6 +34,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
@@ -40,8 +45,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -58,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.data.media.DemoVideoData
 import com.example.data.media.LocalVideoScanner
+import com.example.data.media.RecentlyPlayedManager
 import com.example.ui.components.F2WEmptyState
 import com.example.ui.theme.F2WCardBorder
 import com.example.ui.theme.F2WCyanPrimary
@@ -75,12 +84,16 @@ fun VideoScreen(
     modifier: Modifier = Modifier,
     videos: List<VideoItem> = emptyList(),
     folders: List<VideoFolder> = emptyList(),
+    isListView: Boolean = false,
+    onToggleViewMode: () -> Unit = {},
     onVideoClick: (VideoItem) -> Unit = {},
     onFolderClick: (VideoFolder) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val scanner = remember { LocalVideoScanner(context) }
+    val recentlyPlayedManager = remember { RecentlyPlayedManager.getInstance(context) }
+    val recentlyPlayedIds by recentlyPlayedManager.recentlyPlayedIds.collectAsState()
 
     var selectedFilter by remember { mutableStateOf(VideoFilterMode.ALL_VIDEO) }
     var scannedVideos by remember {
@@ -91,6 +104,56 @@ fun VideoScreen(
     }
     var isScanning by remember { mutableStateOf(false) }
     var activeVideoForMenu by remember { mutableStateOf<VideoItem?>(null) }
+    var activeGroupDetail by remember { mutableStateOf<VideoNameGroup?>(null) }
+    var activeFolderDetail by remember { mutableStateOf<VideoFolder?>(null) }
+    val favoriteVideoIds = remember { mutableStateListOf<String>("demo_avengers_endgame") }
+
+    val vaultManager = remember { com.example.data.security.PrivacyVaultManager.getInstance(context) }
+    var movedVaultPaths by remember {
+        mutableStateOf(vaultManager.getVaultItems().map { it.originalPath.lowercase() }.toSet())
+    }
+
+    LaunchedEffect(Unit) {
+        vaultManager.vaultUpdates.collect {
+            movedVaultPaths = vaultManager.getVaultItems().map { it.originalPath.lowercase() }.toSet()
+        }
+    }
+
+    val availableVideos = remember(scannedVideos, movedVaultPaths) {
+        if (movedVaultPaths.isEmpty()) scannedVideos
+        else scannedVideos.filter { v ->
+            !movedVaultPaths.contains(v.uriString.lowercase()) &&
+            !movedVaultPaths.any { path -> path.isNotBlank() && path.endsWith(v.title.lowercase()) }
+        }
+    }
+
+    val nameGroups = remember(availableVideos) {
+        VideoNameGrouper.groupVideosByName(availableVideos)
+    }
+
+    val computedFolders = remember(availableVideos) {
+        scanner.extractFolders(availableVideos)
+    }
+
+    if (activeGroupDetail != null) {
+        VideoGroupDetailScreen(
+            group = activeGroupDetail!!,
+            onBack = { activeGroupDetail = null },
+            onVideoClick = onVideoClick,
+            isListView = isListView
+        )
+        return
+    }
+
+    if (activeFolderDetail != null) {
+        VideoFolderDetailScreen(
+            folder = activeFolderDetail!!,
+            onBack = { activeFolderDetail = null },
+            onVideoClick = onVideoClick,
+            isListView = isListView
+        )
+        return
+    }
 
     val permissionToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         Manifest.permission.READ_MEDIA_VIDEO
@@ -137,17 +200,49 @@ fun VideoScreen(
         }
     }
 
-    // Filter videos according to selected filter tab
-    val displayedVideos = remember(selectedFilter, scannedVideos) {
-        when (selectedFilter) {
-            VideoFilterMode.ALL_VIDEO -> scannedVideos
-            VideoFilterMode.GROUP_BY_NAME -> scannedVideos.sortedBy { it.title.lowercase() }
-            VideoFilterMode.RECENTLY_ADDED -> scannedVideos.sortedByDescending { it.dateAdded }
-            VideoFilterMode.RECENTLY_PLAYED -> scannedVideos.filter { it.playbackProgressMs > 0 }
-                .ifEmpty { scannedVideos.take(8) }
-            VideoFilterMode.GROUP_BY_FOLDER -> scannedVideos
+    // Automatically update the list when new videos are added to the device storage
+    DisposableEffect(hasPermission) {
+        if (!hasPermission) return@DisposableEffect onDispose {}
+
+        val contentObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                super.onChange(selfChange)
+                triggerScan()
+            }
+        }
+
+        try {
+            context.contentResolver.registerContentObserver(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                true,
+                contentObserver
+            )
+        } catch (_: Exception) {}
+
+        onDispose {
+            try {
+                context.contentResolver.unregisterContentObserver(contentObserver)
+            } catch (_: Exception) {}
         }
     }
+
+    // Filter videos according to selected filter tab
+    val displayedVideos = remember(selectedFilter, availableVideos, recentlyPlayedIds) {
+        when (selectedFilter) {
+            VideoFilterMode.ALL_VIDEO -> availableVideos
+            VideoFilterMode.GROUP_BY_NAME -> availableVideos.sortedBy { it.title.lowercase() }
+            VideoFilterMode.RECENTLY_ADDED -> availableVideos.sortedWith(
+                compareByDescending<VideoItem> { it.dateAdded }
+                    .thenByDescending { it.id.toLongOrNull() ?: 0L }
+            )
+            VideoFilterMode.RECENTLY_PLAYED -> {
+                recentlyPlayedManager.getRecentlyPlayedVideos(availableVideos)
+            }
+            VideoFilterMode.GROUP_BY_FOLDER -> availableVideos
+        }
+    }
+
+    val columnsCount = if (isListView) 1 else 2
 
     Column(
         modifier = modifier
@@ -156,19 +251,19 @@ fun VideoScreen(
             .testTag("video_screen_container")
     ) {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Fixed(columnsCount),
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = 14.dp,
                 end = 14.dp,
                 top = 10.dp,
-                bottom = 110.dp
+                bottom = 16.dp
             ),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Header: 2 Rows of Filter Pill Buttons matching F2W design
-            item(span = { GridItemSpan(2) }) {
+            item(span = { GridItemSpan(columnsCount) }) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     // Row 1: [ All Video ] [ Group by Name ] [ Group by Folder ]
                     Row(
@@ -226,7 +321,7 @@ fun VideoScreen(
             }
 
             // Status bar showing active mode and video count
-            item(span = { GridItemSpan(2) }) {
+            item(span = { GridItemSpan(columnsCount) }) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -235,7 +330,8 @@ fun VideoScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val countText = when (selectedFilter) {
-                        VideoFilterMode.GROUP_BY_FOLDER -> "${scannedFolders.size} Folders"
+                        VideoFilterMode.GROUP_BY_FOLDER -> "${computedFolders.size} Folders"
+                        VideoFilterMode.GROUP_BY_NAME -> "${nameGroups.size} Groups"
                         else -> "${displayedVideos.size} Videos"
                     }
 
@@ -265,7 +361,7 @@ fun VideoScreen(
                             )
                         } else {
                             Text(
-                                text = "2-Column Grid",
+                                text = if (isListView) "List View" else "2-Column Grid",
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     color = F2WTextTertiary,
                                     fontSize = 11.sp
@@ -276,10 +372,49 @@ fun VideoScreen(
                 }
             }
 
-            // Video Content Area (2-Column Grid)
-            if (selectedFilter == VideoFilterMode.GROUP_BY_FOLDER) {
-                if (scannedFolders.isEmpty() && !isScanning) {
-                    item(span = { GridItemSpan(2) }) {
+            // Video Content Area (List or 2-Column Grid)
+            if (selectedFilter == VideoFilterMode.GROUP_BY_NAME) {
+                if (nameGroups.isEmpty() && !isScanning) {
+                    item(span = { GridItemSpan(columnsCount) }) {
+                        F2WEmptyState(
+                            icon = Icons.Outlined.VideoLibrary,
+                            title = "No Video Groups Found",
+                            description = "Videos with matching or similar movie names will be automatically grouped here in 2 columns.",
+                            actionLabel = if (hasPermission) "Scan Device Videos" else "Grant Storage Permission",
+                            actionIcon = Icons.Filled.Refresh,
+                            onActionClick = {
+                                if (hasPermission) {
+                                    triggerScan()
+                                } else {
+                                    permissionLauncher.launch(permissionToRequest)
+                                }
+                                onScanRequest()
+                            },
+                            tipText = "Franchises like Avatar, Dune, Spider-Man are automatically clustered",
+                            testTag = "groups_empty_state"
+                        )
+                    }
+                } else {
+                    items(
+                        items = nameGroups,
+                        key = { it.id }
+                    ) { group ->
+                        if (isListView) {
+                            VideoNameGroupListCard(
+                                group = group,
+                                onClick = { activeGroupDetail = group }
+                            )
+                        } else {
+                            VideoNameGroupCard(
+                                group = group,
+                                onClick = { activeGroupDetail = group }
+                            )
+                        }
+                    }
+                }
+            } else if (selectedFilter == VideoFilterMode.GROUP_BY_FOLDER) {
+                if (computedFolders.isEmpty() && !isScanning) {
+                    item(span = { GridItemSpan(columnsCount) }) {
                         F2WEmptyState(
                             icon = Icons.Outlined.VideoLibrary,
                             title = "No Video Folders Found",
@@ -299,46 +434,84 @@ fun VideoScreen(
                         )
                     }
                 } else {
-                    items(scannedFolders) { folder ->
-                        VideoFolderCard(
-                            folder = folder,
-                            onClick = { onFolderClick(folder) }
-                        )
+                    items(
+                        items = computedFolders,
+                        key = { it.id }
+                    ) { folder ->
+                        if (isListView) {
+                            VideoFolderListCard(
+                                folder = folder,
+                                onClick = { activeFolderDetail = folder }
+                            )
+                        } else {
+                            VideoFolderCard(
+                                folder = folder,
+                                onClick = { activeFolderDetail = folder }
+                            )
+                        }
                     }
                 }
             } else {
                 if (displayedVideos.isEmpty() && !isScanning) {
-                    // Empty state when no real videos are found on device (no fake demo videos)
-                    item(span = { GridItemSpan(2) }) {
-                        F2WEmptyState(
-                            icon = Icons.Outlined.VideoLibrary,
-                            title = "No Local Videos Found",
-                            description = "Detected videos will be displayed in this clean 2-column grid with posters, quality (4K/1080P/720P), duration, and playback progress.",
-                            actionLabel = if (hasPermission) "Scan Device Videos" else "Grant Storage Permission",
-                            actionIcon = Icons.Filled.Refresh,
-                            onActionClick = {
-                                if (hasPermission) {
-                                    triggerScan()
-                                } else {
-                                    permissionLauncher.launch(permissionToRequest)
-                                }
-                                onScanRequest()
-                            },
-                            tipText = "Supports MP4, MKV, AVI, WebM and all local video formats",
-                            testTag = "video_empty_state"
-                        )
+                    item(span = { GridItemSpan(columnsCount) }) {
+                        if (selectedFilter == VideoFilterMode.RECENTLY_PLAYED) {
+                            F2WEmptyState(
+                                icon = Icons.Outlined.VideoLibrary,
+                                title = "Hakuna Video Zilizotazamwa Karibuni",
+                                description = "Video zozote unazotazama zitahifadhiwa hapa kwa mpangilio (hadi video 8) ukiweza kuendeleza pale ulipoishia.",
+                                actionLabel = "Tazama Video",
+                                actionIcon = Icons.Filled.PlayArrow,
+                                onActionClick = { selectedFilter = VideoFilterMode.ALL_VIDEO },
+                                tipText = "Hurekodi nafasi ya video uliyotazama mara ya mwisho",
+                                testTag = "recently_played_empty_state"
+                            )
+                        } else {
+                            F2WEmptyState(
+                                icon = Icons.Outlined.VideoLibrary,
+                                title = "No Local Videos Found",
+                                description = "Detected videos will be displayed in this clean view with posters, quality (4K/1080P/720P), duration, and playback progress.",
+                                actionLabel = if (hasPermission) "Scan Device Videos" else "Grant Storage Permission",
+                                actionIcon = Icons.Filled.Refresh,
+                                onActionClick = {
+                                    if (hasPermission) {
+                                        triggerScan()
+                                    } else {
+                                        permissionLauncher.launch(permissionToRequest)
+                                    }
+                                    onScanRequest()
+                                },
+                                tipText = "Supports MP4, MKV, AVI, WebM and all local video formats",
+                                testTag = "video_empty_state"
+                            )
+                        }
                     }
                 } else {
-                    // 2-Column Grid of real video cards
+                    // Video cards: Horizontal List or 2-Column Grid based on user's toggle
                     items(
                         items = displayedVideos,
                         key = { it.id }
                     ) { video ->
-                        VideoThumbnailCard(
-                            video = video,
-                            onClick = { onVideoClick(video) },
-                            onMoreOptionsClick = { activeVideoForMenu = video }
-                        )
+                        if (isListView) {
+                            VideoListCard(
+                                video = video,
+                                isFavorite = favoriteVideoIds.contains(video.id),
+                                onToggleFavorite = {
+                                    if (favoriteVideoIds.contains(video.id)) {
+                                        favoriteVideoIds.remove(video.id)
+                                    } else {
+                                        favoriteVideoIds.add(video.id)
+                                    }
+                                },
+                                onClick = { onVideoClick(video) },
+                                onMoreOptionsClick = { activeVideoForMenu = video }
+                            )
+                        } else {
+                            VideoThumbnailCard(
+                                video = video,
+                                onClick = { onVideoClick(video) },
+                                onMoreOptionsClick = { activeVideoForMenu = video }
+                            )
+                        }
                     }
                 }
             }

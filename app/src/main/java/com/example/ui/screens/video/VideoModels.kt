@@ -35,8 +35,11 @@ data class VideoFolder(
     val id: String,
     val name: String,
     val videoCount: Int = 0,
-    val path: String = ""
-)
+    val path: String = "",
+    val videos: List<VideoItem> = emptyList()
+) {
+    val primaryVideo: VideoItem? get() = videos.firstOrNull()
+}
 
 enum class VideoFilterMode(
     val label: String,
